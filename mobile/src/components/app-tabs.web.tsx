@@ -39,7 +39,8 @@ type TabButtonProps = TabTriggerSlotProps & {
 };
 
 // Dibuja un botón y resalta la pestaña seleccionada.
-function TabButton({ icon, label, isFocused, ...props }: TabButtonProps) {
+function TabButton({ icon, label, isFocused, ref: tabRef, ...props }: TabButtonProps) {
+  void tabRef; // No pasamos al Pressable el ref incompatible del slot web.
   return (
     <Pressable
       {...props}

@@ -1,4 +1,4 @@
-import ReadingHistory from '@/features/reading/components/ReadingHistory';
+
 
 import { useUser } from '@/context/UserContext';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -269,21 +269,23 @@ useFocusEffect(
   <Text style={styles.comingSoon}>ABRIR →</Text>
 </Pressable>
 
-      <View style={styles.activityCard}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => router.push('/writing')}
+         style={styles.activityCard}
+          >
         <View style={[styles.activityIcon, { backgroundColor: '#D1FAE5' }]}>
           <Text style={styles.activityEmoji}>✍️</Text>
         </View>
         <View style={styles.activityText}>
-          <Text style={styles.activityTitle}>Escritura</Text>
+          <Text style={styles.activityTitle}>Writing</Text>
           <Text style={styles.activityDescription}>
             Practica escribir en inglés y mejora poco a poco.
           </Text>
         </View>
-        <Text style={styles.comingSoon}>PRÓXIMAMENTE</Text>
-      </View>
+        <Text style={styles.comingSoon}>ABRIR →</Text>
+      </Pressable>
 
-      {/* Muestra los intentos de lectura guardados en SQLite. */}
-      <ReadingHistory />
    
     </ScrollView>
   );
