@@ -105,6 +105,31 @@ class GeneratedWritingChallenge(BaseModel):
     connectors: list[str]
     vocabulary: list[WritingVocabularyItem]
 
+    # Una corrección individual: texto original, versión corregida y explicación.
+class WritingCorrection(BaseModel):
+    original: str
+    corrected: str
+    explanation: str
+
+
+# Estructura de la revisión que esperamos recibir de Gemini.
+class GeneratedWritingReview(BaseModel):
+    score: int
+    estimated_level: str
+    overall_feedback: str
+    corrected_text: str
+    corrections: list[WritingCorrection]
+    strengths: list[str]
+    next_steps: list[str]
+
+
+# Datos que la app enviará cuando el usuario pida revisar su texto.
+class WritingReviewRequest(BaseModel):
+    level: str
+    instruction: str
+    text: str
+    minimum_words: int
+
 
 def ask_gemini(prompt: str, config=None):
     """
@@ -380,6 +405,98 @@ Devuelve únicamente los datos con el formato JSON solicitado."""
         ],
         "model_used": model_used,
     }
+
+
+@app.post("/writing/review")
+def review_writing(data: WritingReviewRequest):
+    """Envía el texto del estudiante a Gemini y devuelve sugerencias."""
+
+    allowed_levels = {"Básico", "Intermedio", "Avanzado"}
+
+    if data.level not in allowed_levels:
+        raise HTTPException(
+            status_code=422,
+            detail="El nivel debe ser Básico, Intermedio o Avanzado.",
+        )
+
+    student_text = data.text.strip()
+
+    if not student_text:
+        raise HTTPException(
+            status_code=422,
+            detail="Escribe tu texto antes de solicitar una revisión.",
+        )
+
+    # Limita el tamaño para evitar solicitudes excesivamente largas.
+    if len(student_text) > 5000:
+        raise HTTPException(
+            status_code=422,
+            detail="El texto no puede superar los 5000 caracteres.",
+        )
+
+    word_count = len(student_text.split())
+
+    prompt = f"""Eres un tutor de inglés amable y claro.
+Revisa la redacción del estudiante sin escribirla por él.
+
+Nivel elegido: {data.level}
+Instrucción del reto: {data.instruction}
+Mínimo de palabras solicitado: {data.minimum_words}
+Cantidad de palabras escrita: {word_count}
+
+Texto del estudiante:
+\"\"\"
+{student_text}
+\"\"\"
+
+Devuelve:
+- Una puntuación entera de 0 a 100.
+- Un nivel estimado, sin presentarlo como una certificación oficial.
+- Una opinión general breve en español.
+- El texto completo con las correcciones de inglés necesarias.
+- Una lista de errores importantes, indicando el original, la corrección y su explicación en español.
+- Una lista de aspectos que hizo bien.
+- Una lista breve de próximos pasos para mejorar.
+
+Adapta la evaluación al nivel seleccionado.
+No inventes errores. Si una oración ya es correcta, no la marques como incorrecta.
+Si el texto tiene menos palabras que el mínimo, menciónalo en los próximos pasos.
+Escribe las explicaciones y recomendaciones en español.
+Devuelve únicamente los datos con el formato JSON solicitado."""
+
+    review_config = types.GenerateContentConfig(
+        response_mime_type="application/json",
+        response_schema=GeneratedWritingReview,
+        max_output_tokens=1800,
+    )
+
+    try:
+        text, model_used = ask_gemini(prompt, config=review_config)
+    except errors.APIError:
+        raise HTTPException(
+            status_code=503,
+            detail="No pudimos revisar tu texto ahora. Intenta de nuevo.",
+        )
+
+    try:
+        review = GeneratedWritingReview.model_validate_json(text)
+    except ValueError:
+        raise HTTPException(
+            status_code=502,
+            detail="La IA devolvió una revisión con un formato inesperado.",
+        )
+
+    # Evita mostrar una puntuación fuera del rango que usa la app.
+    if not 0 <= review.score <= 100:
+        raise HTTPException(
+            status_code=502,
+            detail="La IA devolvió una puntuación inválida.",
+        )
+
+    result = review.model_dump()
+    result["model_used"] = model_used
+    result["word_count"] = word_count
+    return result
 
 
 
